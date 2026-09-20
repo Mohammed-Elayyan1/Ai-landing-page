@@ -1,0 +1,6 @@
+   fastapi
+   uvicorn
+   stripe
+   anthropic
+   python-multipart
+   python-dotenv
