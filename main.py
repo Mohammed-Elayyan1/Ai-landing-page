@@ -54,6 +54,20 @@ SMTP_USER = os.environ.get("SMTP_USER", "")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER)
 
+# رمز إداري بسيط لحماية نقاط الإدارة (تفعيل/إلغاء اشتراكات PayPal يدويًا)
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
+if not ADMIN_TOKEN:
+    print("⚠️  ADMIN_TOKEN غير مُعرّف — نقاط لوحة الإدارة (/admin/*) ستكون غير محمية. عرّفه في .env قبل النشر الفعلي.")
+
+# روابط دفع PayPal الثابتة الخاصة بك (PayPal.Me / Buy-Now links).
+# هذه روابط "بدون ربط برمجي" — أي لا يوجد webhook تلقائي منها مثل Stripe،
+# لذلك التفعيل يعتمد على نموذج "المطالبة" أدناه (/enterprise/paypal/claim).
+PAYPAL_LINKS = {
+    "basic": "https://www.paypal.com/ncp/payment/23V3WQK4NVTG4",
+    "pro": "https://www.paypal.com/ncp/payment/Z59KCWS6MZAC6",
+    "enterprise": "https://www.paypal.com/ncp/payment/CS59KMKAETBFC",
+}
+
 if not stripe.api_key:
     print("⚠️  STRIPE_SECRET_KEY غير مُعرّف — الدفع لن يعمل حتى تضيفه في .env")
 if not ANTHROPIC_API_KEY:
@@ -405,6 +419,94 @@ async def register_trial(name: str = Form(...), email: str = Form(...)):
     _save_db(DB_COMPANIES)
     send_api_key_email(email, name, "basic", api_key)
     return {"status": "success", "company": name, "plan": "basic", "api_key": api_key}
+
+
+# =============================================================================
+# روابط PayPal الثابتة — الفرونت إند يجلبها من هنا بدل كتابتها يدويًا بالـ HTML
+# =============================================================================
+@app.get("/enterprise/paypal-links")
+async def get_paypal_links():
+    return PAYPAL_LINKS
+
+
+# =============================================================================
+# مطالبة تفعيل عبر PayPal — نظرًا لأن روابط PayPal Buy-Now البسيطة
+# (بدون تكامل REST API + Webhook حقيقي من PayPal) لا ترسل أي تأكيد تلقائي
+# لسيرفرك عند نجاح الدفع، فهذه النقطة تُصدر مفتاح API فورًا للعميل بعد أن
+# يخبرك بأنه دفع (اسم + بريد + رقم عملية PayPal اختياري)، وتُعلَّم الحالة
+# "بانتظار التحقق" حتى تراجع حسابك على PayPal يدويًا وتؤكد أو تُلغي.
+#
+# ⚠️ هذا حل عملي وسريع، لكنه يعتمد على الثقة المبدئية بالعميل. إن أردت حماية
+# كاملة من الاحتيال، الخيار الصحيح لاحقًا هو تفعيل PayPal REST API + Webhooks
+# الحقيقية (مثل ما فعلنا تمامًا مع Stripe)، لا مجرد روابط دفع ثابتة.
+# =============================================================================
+class PaypalClaim(BaseModel):
+    name: str
+    email: str
+    plan: str
+    paypal_reference: str = ""
+
+
+@app.post("/enterprise/paypal/claim")
+async def claim_paypal_subscription(claim: PaypalClaim):
+    if claim.plan not in PLANS:
+        raise HTTPException(status_code=400, detail="الباقة غير صالحة.")
+
+    api_key = f"ent_key_{uuid.uuid4().hex}"
+    DB_COMPANIES[api_key] = {
+        "name": claim.name,
+        "plan": claim.plan,
+        "email": claim.email,
+        "file_data": "",
+        "usage": {},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "active": True,
+        "payment_method": "paypal",
+        "paypal_reference": claim.paypal_reference,
+        "verified": False,  # يبقى False حتى تراجعه أنت يدويًا من لوحة PayPal
+    }
+    _save_db(DB_COMPANIES)
+    send_api_key_email(claim.email, claim.name, claim.plan, api_key)
+
+    return {
+        "status": "success",
+        "message": "تم إصدار مفتاحكم فورًا. سيتم التحقق من الدفعة خلال ساعات العمل.",
+        "company": claim.name,
+        "plan": claim.plan,
+        "api_key": api_key,
+    }
+
+
+def _check_admin(x_admin_token: str) -> None:
+    if not ADMIN_TOKEN or x_admin_token != ADMIN_TOKEN:
+        raise HTTPException(
+            status_code=403, detail="غير مصرح لك بالوصول لهذه النقطة.")
+
+
+@app.get("/admin/companies")
+async def admin_list_companies(x_admin_token: str = Header(None)):
+    _check_admin(x_admin_token)
+    return DB_COMPANIES
+
+
+@app.post("/admin/verify/{api_key}")
+async def admin_verify_payment(api_key: str, x_admin_token: str = Header(None)):
+    """استخدمها بعد ما تتأكد يدويًا من لوحة PayPal إن الدفعة فعلاً وصلت."""
+    _check_admin(x_admin_token)
+    company = get_company(api_key)
+    company["verified"] = True
+    _save_db(DB_COMPANIES)
+    return {"status": "success", "message": f"تم تأكيد اشتراك {company['name']}."}
+
+
+@app.post("/admin/revoke/{api_key}")
+async def admin_revoke(api_key: str, x_admin_token: str = Header(None)):
+    """استخدمها إذا اكتشفت مطالبة غير حقيقية (لم تصل الدفعة فعليًا)."""
+    _check_admin(x_admin_token)
+    company = get_company(api_key)
+    company["active"] = False
+    _save_db(DB_COMPANIES)
+    return {"status": "success", "message": f"تم إيقاف حساب {company['name']}."}
 
 
 if __name__ == "__main__":

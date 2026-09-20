@@ -1178,6 +1178,9 @@
         }
 
         .amount-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             padding: 8px 16px;
             border-radius: 999px;
             background: var(--glass-strong);
@@ -1186,6 +1189,7 @@
             font-weight: 700;
             color: var(--text-1);
             transition: .15s;
+            cursor: pointer;
         }
 
         .amount-chip.active {
@@ -1582,8 +1586,28 @@
                             </div>
                         </div>
                         <p style="color:var(--text-1); font-size:0.9rem;" data-i18n="pay.stripeDesc"></p>
-                        <button class="btn btn-primary btn-block" style="margin-top:20px;" id="stripeBtn"
-                            data-i18n="pay.stripeBtn"></button>
+                        <form id="stripeForm" onsubmit="return false;"
+                            style="margin-top:18px; display:flex; flex-direction:column; gap:12px;">
+                            <div class="field" style="margin-bottom:0;">
+                                <label for="stripeName" data-i18n="pay.nameLabel"></label>
+                                <input id="stripeName" type="text" required>
+                            </div>
+                            <div class="field" style="margin-bottom:0;">
+                                <label for="stripeEmail" data-i18n="pay.emailLabel"></label>
+                                <input id="stripeEmail" type="email" required placeholder="name@company.com">
+                            </div>
+                            <div class="field" style="margin-bottom:0;">
+                                <label for="stripePlan" data-i18n="pay.planLabel"></label>
+                                <select id="stripePlan"
+                                    style="width:100%; padding:12px 14px; border-radius:12px; background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.12); color:var(--text-0); font-size:0.9rem;">
+                                    <option value="basic">Basic — $29</option>
+                                    <option value="pro" selected>Pro — $79</option>
+                                    <option value="enterprise">Enterprise — $199</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block" id="stripeBtn"
+                                data-i18n="pay.stripeBtn"></button>
+                        </form>
                     </div>
 
                     <div class="pay-card">
@@ -1595,13 +1619,43 @@
                             </div>
                         </div>
                         <p style="color:var(--text-1); font-size:0.9rem;" data-i18n="pay.paypalDesc"></p>
-                        <div class="amount-row" id="amountRow">
-                            <button class="amount-chip active" data-amt="29">$29</button>
-                            <button class="amount-chip" data-amt="79">$79</button>
-                            <button class="amount-chip" data-amt="199">$199</button>
+
+                        <div class="amount-row" id="paypalLinkRow">
+                            <a class="amount-chip active" data-plan="basic" target="_blank" rel="noopener">Basic $29</a>
+                            <a class="amount-chip" data-plan="pro" target="_blank" rel="noopener">Pro $79</a>
+                            <a class="amount-chip" data-plan="enterprise" target="_blank" rel="noopener">Enterprise
+                                $199</a>
                         </div>
-                        <button class="btn btn-gold btn-block" id="paypalBtn" data-i18n="pay.paypalBtn"></button>
-                        <p class="pay-note" data-i18n-html="pay.paypalNote"></p>
+
+                        <form id="paypalClaimForm" onsubmit="return false;"
+                            style="margin-top:16px; display:flex; flex-direction:column; gap:12px;">
+                            <div class="field" style="margin-bottom:0;">
+                                <label for="ppName" data-i18n="pay.nameLabel"></label>
+                                <input id="ppName" type="text" required>
+                            </div>
+                            <div class="field" style="margin-bottom:0;">
+                                <label for="ppEmail" data-i18n="pay.emailLabel"></label>
+                                <input id="ppEmail" type="email" required placeholder="name@company.com">
+                            </div>
+                            <div class="field" style="margin-bottom:0;">
+                                <label for="ppRef" data-i18n="pay.refLabel"></label>
+                                <input id="ppRef" type="text" placeholder="Transaction ID (optional)">
+                            </div>
+                            <button type="submit" class="btn btn-gold btn-block" id="paypalClaimBtn"
+                                data-i18n="pay.paypalClaimBtn"></button>
+                        </form>
+                        <p class="pay-note" data-i18n="pay.paypalNote"></p>
+                    </div>
+                </div>
+
+                <div id="apiKeyResult"
+                    style="display:none; max-width:640px; margin:26px auto 0; background:var(--glass); border:1px solid var(--border); border-radius:var(--radius-md); padding:22px 24px; text-align:center;">
+                    <div style="font-size:0.85rem; color:var(--text-2); margin-bottom:8px;"
+                        data-i18n="pay.keyReadyLabel"></div>
+                    <div style="display:flex; gap:10px; align-items:center; justify-content:center; flex-wrap:wrap;">
+                        <code id="apiKeyValue"
+                            style="background:rgba(255,255,255,0.08); padding:8px 14px; border-radius:8px; font-size:0.9rem; word-break:break-all;"></code>
+                        <button class="btn btn-ghost btn-sm" id="copyKeyBtn" data-i18n="pay.copyBtn"></button>
                     </div>
                 </div>
             </div>
@@ -1679,8 +1733,18 @@
     <div class="toast" id="toast"></div>
 
     <script>
-        // 💡 قم بتعديل هذا الرابط لربط زر PayPal مباشرة بحسابك الفعلي (أو استبداله برابط دفع Stripe المباشر عند الحاجة)
-        const PAYPAL_USERNAME = "YourPayPalUsername"; // استبدل YourPayPalUsername باسم حسابك على PayPal.Me
+        // ---------------- CONFIG: EDIT THIS ----------------
+        // بعد نشر main.py على سيرفر حقيقي، غيّر هذا الرابط ليطابق رابط الخادم الفعلي
+        // After deploying main.py to a real server, update this to your server's URL
+        const API_BASE_URL = "http://localhost:8000";
+
+        // روابط PayPal الثابتة لكل باقة (نفس الروابط الموجودة في main.py)
+        const PAYPAL_LINKS = {
+            basic: "https://www.paypal.com/ncp/payment/23V3WQK4NVTG4",
+            pro: "https://www.paypal.com/ncp/payment/Z59KCWS6MZAC6",
+            enterprise: "https://www.paypal.com/ncp/payment/CS59KMKAETBFC",
+        };
+        // -----------------------------------------------------
 
         const T = {
             ar: {
@@ -1764,18 +1828,23 @@
                     remember: "تذكرني", forgot: "نسيت كلمة المرور؟", or: "أو", google: "المتابعة عبر Google",
                     submitLogin: "تسجيل الدخول", submitSignup: "إنشاء الحساب",
                     haveAccount: "ليس لديك حساب؟", noAccount: "لديك حساب بالفعل؟", signupLink: "أنشئ حسابًا", loginLink: "سجّل الدخول",
-                    toastSubmit: "تم إرسال البيانات بنجاح! سيتم تحويلك للوحة التحكم..."
+                    toastSubmit: "هذا نموذج عرض تصميمي — يجب ربطه بواجهة API الخاصة بالخادم"
                 },
                 pay: {
                     kicker: "طرق الدفع", title: "ادفع بالطريقة التي تناسبك", sub: "اشتراكات آمنة عبر Stripe، أو دفع مباشر وسريع عبر PayPal.",
                     stripeTitle: "الدفع عبر Stripe", stripeSub: "اشتراك شهري متجدد تلقائيًا",
-                    stripeDesc: 'مرتبط مباشرة بالباقات أعلاه — يتم إنشاء جلسة دفع آمنة عند الضغط على "ابدأ" في أي باقة.',
-                    stripeBtn: "الاشتراك عبر Stripe", stripeToast: "جارٍ تحويلك إلى صفحة الدفع الآمنة عبر Stripe...",
-                    paypalTitle: "الدفع عبر PayPal", paypalSub: "دفعة مباشرة أو اشتراك يدوي",
-                    paypalDesc: "اختر المبلغ المطابق للباقة، ثم أكمل الدفع عبر حساب PayPal الخاص بالمنصّة.",
-                    paypalBtn: "الدفع عبر PayPal",
-                    paypalNote: 'تم تفعيل الزر لربطه بحساب الدفع المباشر الخاص بك.',
-                    paypalMissing: "الرجاء إدخال اسم المستخدم الصحيح لـ PayPal"
+                    stripeDesc: "أدخل بيانات شركتك واختر الباقة — سيتم تحويلك مباشرة لصفحة دفع Stripe الآمنة.",
+                    stripeBtn: "المتابعة إلى الدفع", stripeToast: "جاري تحويلك إلى صفحة الدفع الآمنة عبر Stripe...",
+                    paypalTitle: "الدفع عبر PayPal", paypalSub: "ادفع أولًا ثم فعّل حسابك فورًا",
+                    paypalDesc: "اضغط على الباقة المناسبة لإتمام الدفع عبر PayPal، ثم عبّئ النموذج أدناه لاستلام مفتاح API فورًا.",
+                    nameLabel: "اسم الشركة", emailLabel: "البريد الإلكتروني", planLabel: "الباقة",
+                    refLabel: "رقم عملية PayPal (اختياري)",
+                    paypalClaimBtn: "استلم مفتاح API الآن",
+                    paypalNote: "⚠️ يتم إصدار المفتاح فورًا لتسريع تجربتك، وتتم مراجعة الدفعة يدويًا من حساب PayPal خلال ساعات العمل. أي حساب غير مؤكَّد قد يُوقف.",
+                    keyReadyLabel: "تم تفعيل حسابكم! هذا مفتاح الـ API الخاص بكم:",
+                    copyBtn: "نسخ",
+                    stripeError: "حدث خطأ أثناء إنشاء جلسة الدفع. تحقق من إعداد الخادم.",
+                    paypalClaimError: "حدث خطأ أثناء إصدار المفتاح. حاول مرة أخرى."
                 },
                 faq: {
                     kicker: "الأسئلة الشائعة", title: "كل ما تحتاج معرفته قبل البدء",
@@ -1879,18 +1948,23 @@
                     remember: "Remember me", forgot: "Forgot password?", or: "or", google: "Continue with Google",
                     submitLogin: "Log in", submitSignup: "Create account",
                     haveAccount: "Don't have an account?", noAccount: "Already have an account?", signupLink: "Sign up", loginLink: "Log in",
-                    toastSubmit: "Submitted successfully! Redirecting..."
+                    toastSubmit: "This is a design demo — connect it to your backend API"
                 },
                 pay: {
                     kicker: "Payment methods", title: "Pay the way that works for you", sub: "Secure recurring billing via Stripe, or a direct, fast payment via PayPal.",
                     stripeTitle: "Pay with Stripe", stripeSub: "Auto-renewing monthly subscription",
-                    stripeDesc: 'Linked directly to the plans above — a secure checkout session is created when you click "Start" on any plan.',
-                    stripeBtn: "Subscribe with Stripe", stripeToast: "Redirecting to Stripe secure checkout...",
-                    paypalTitle: "Pay with PayPal", paypalSub: "One-time payment or manual subscription",
-                    paypalDesc: "Pick the amount matching your plan, then complete payment via the platform's PayPal account.",
-                    paypalBtn: "Pay with PayPal",
-                    paypalNote: 'Button activated successfully.',
-                    paypalMissing: "Please enter a valid PayPal username"
+                    stripeDesc: "Enter your company details and pick a plan — you'll be sent straight to Stripe's secure checkout.",
+                    stripeBtn: "Continue to payment", stripeToast: "Redirecting you to Stripe's secure checkout...",
+                    paypalTitle: "Pay with PayPal", paypalSub: "Pay first, then activate instantly",
+                    paypalDesc: "Click the matching plan to pay via PayPal, then fill the form below to get your API key instantly.",
+                    nameLabel: "Company name", emailLabel: "Email", planLabel: "Plan",
+                    refLabel: "PayPal transaction ID (optional)",
+                    paypalClaimBtn: "Get my API key now",
+                    paypalNote: "⚠️ Your key is issued instantly to speed up onboarding, and the payment is manually verified against our PayPal account during business hours. Unverified accounts may be suspended.",
+                    keyReadyLabel: "Your account is active! Here's your API key:",
+                    copyBtn: "Copy",
+                    stripeError: "Something went wrong creating the checkout session. Check your server setup.",
+                    paypalClaimError: "Something went wrong issuing your key. Please try again."
                 },
                 faq: {
                     kicker: "FAQ", title: "Everything you need to know before you start",
@@ -1920,6 +1994,7 @@
         function get(obj, path) { return path.split('.').reduce((o, k) => (o || {})[k], obj); }
 
         function renderDynamic(dict) {
+            // Features
             document.getElementById('featuresGrid').innerHTML = dict.features.items.map(f => `
       <div class="feature-card">
         <div class="feature-icon">${f.icon}</div>
@@ -1927,6 +2002,7 @@
         <p>${f.text}</p>
       </div>`).join('');
 
+            // Steps
             document.getElementById('stepsGrid').innerHTML = dict.how.steps.map((s, i) => `
       <div class="step">
         <div class="step-num">${i + 1}</div>
@@ -1934,6 +2010,7 @@
         <p>${s.text}</p>
       </div>`).join('');
 
+            // Pricing
             document.getElementById('pricingGrid').innerHTML = dict.pricing.plans.map(p => `
       <div class="price-card ${p.badge ? 'featured' : ''}">
         ${p.badge ? `<span class="plan-badge">${p.badge}</span>` : ''}
@@ -1944,9 +2021,11 @@
         <a href="#auth" class="btn ${p.btnClass} btn-block">${p.cta}</a>
       </div>`).join('');
 
+            // Trust
             document.getElementById('trustGrid').innerHTML = dict.trust.items.map(t => `
       <div class="trust-card"><div class="ic">${t.ic}</div><h4>${t.title}</h4><p>${t.text}</p></div>`).join('');
 
+            // Testimonials
             document.getElementById('testiGrid').innerHTML = dict.testi.items.map(t => `
       <div class="testi-card">
         <div class="stars">★★★★★</div>
@@ -1954,8 +2033,10 @@
         <div class="testi-person"><div class="avatar">${t.i}</div><div><div class="name">${t.n}</div><div class="role">${t.r}</div></div></div>
       </div>`).join('');
 
+            // Auth list
             document.getElementById('authList').innerHTML = dict.auth.list.map(l => `<li>${l}</li>`).join('');
 
+            // FAQ
             document.getElementById('faqList').innerHTML = dict.faq.items.map(f => `
       <div class="faq-item">
         <button class="faq-q">${f.q} <span class="chev">⌄</span></button>
@@ -2045,6 +2126,7 @@
             setLanguage(lang === 'ar' ? 'en' : 'ar');
         });
 
+        // Theme toggle
         const themeToggle = document.getElementById('themeToggle');
         themeToggle.addEventListener('click', () => {
             const root = document.documentElement;
@@ -2061,6 +2143,7 @@
             window._toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
         }
 
+        // Hero typing animation
         let typingTimer = null;
         let typingToken = 0;
         function resetTyping(dict) {
@@ -2083,37 +2166,97 @@
             loop();
         }
 
+        // Billing switch
         document.getElementById('billingSwitch').addEventListener('click', () => {
             yearly = !yearly;
             document.getElementById('billingSwitch').classList.toggle('on', yearly);
             bindBillingAmounts(currentDict());
         });
 
+        // Auth tabs
         document.getElementById('tabLogin').addEventListener('click', () => { authMode = 'login'; setAuthMode('login', currentDict()); });
         document.getElementById('tabSignup').addEventListener('click', () => { authMode = 'signup'; setAuthMode('signup', currentDict()); });
         document.getElementById('authForm').addEventListener('submit', () => showToast(currentDict().auth.toastSubmit));
 
-        document.getElementById('stripeBtn').addEventListener('click', () => showToast(currentDict().pay.stripeToast));
-        let selectedAmount = 29;
-        document.querySelectorAll('.amount-chip').forEach(chip => {
-            chip.addEventListene
-            chip.addEventListener('click', () => {
-                document.querySelectorAll('.amount-chip').forEach(c => c.classList.remove('active'));
-                chip.classList.add('active');
-                selectedAmount = chip.dataset.amt;
+        // Payment
+        // --- Wire the PayPal per-plan buttons to the real payment links ---
+        document.querySelectorAll('#paypalLinkRow .amount-chip').forEach(a => {
+            a.href = PAYPAL_LINKS[a.dataset.plan];
+            a.addEventListener('click', () => {
+                document.querySelectorAll('#paypalLinkRow .amount-chip').forEach(c => c.classList.remove('active'));
+                a.classList.add('active');
+                selectedPaypalPlan = a.dataset.plan;
             });
         });
-        document.getElementById('paypalBtn').addEventListener('click', () => {
-            if (PAYPAL_USERNAME === 'YOUR-PAYPAL-USERNAME') {
-                showToast(currentDict().pay.paypalMissing);
-                return;
-            }
-            window.open(`https://paypal.me/${PAYPAL_USERNAME}/${selectedAmount}`, '_blank');
+        let selectedPaypalPlan = 'basic';
+
+        function showApiKey(key) {
+            document.getElementById('apiKeyValue').textContent = key;
+            document.getElementById('apiKeyResult').style.display = 'block';
+            document.getElementById('apiKeyResult').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        document.getElementById('copyKeyBtn').addEventListener('click', () => {
+            navigator.clipboard.writeText(document.getElementById('apiKeyValue').textContent);
+            showToast(lang === 'ar' ? 'تم النسخ' : 'Copied');
         });
 
+        // --- Real Stripe checkout: calls your FastAPI backend, then redirects ---
+        document.getElementById('stripeForm').addEventListener('submit', async () => {
+            const name = document.getElementById('stripeName').value.trim();
+            const email = document.getElementById('stripeEmail').value.trim();
+            const plan = document.getElementById('stripePlan').value;
+            if (!name || !email) { return; }
+
+            const btn = document.getElementById('stripeBtn');
+            const originalText = btn.textContent;
+            btn.textContent = '...'; btn.disabled = true;
+            try {
+                const body = new URLSearchParams({ name, email, plan });
+                const res = await fetch(`${API_BASE_URL}/enterprise/create-checkout-session`, {
+                    method: 'POST', body
+                });
+                if (!res.ok) throw new Error('request failed');
+                const data = await res.json();
+                showToast(currentDict().pay.stripeToast);
+                window.location.href = data.checkout_url;
+            } catch (err) {
+                showToast(currentDict().pay.stripeError);
+            } finally {
+                btn.textContent = originalText; btn.disabled = false;
+            }
+        });
+
+        // --- Real PayPal claim: calls your backend, gets an API key back instantly ---
+        document.getElementById('paypalClaimForm').addEventListener('submit', async () => {
+            const name = document.getElementById('ppName').value.trim();
+            const email = document.getElementById('ppEmail').value.trim();
+            const paypal_reference = document.getElementById('ppRef').value.trim();
+            if (!name || !email) { return; }
+
+            const btn = document.getElementById('paypalClaimBtn');
+            const originalText = btn.textContent;
+            btn.textContent = '...'; btn.disabled = true;
+            try {
+                const res = await fetch(`${API_BASE_URL}/enterprise/paypal/claim`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email, plan: selectedPaypalPlan, paypal_reference })
+                });
+                if (!res.ok) throw new Error('request failed');
+                const data = await res.json();
+                showApiKey(data.api_key);
+            } catch (err) {
+                showToast(currentDict().pay.paypalClaimError);
+            } finally {
+                btn.textContent = originalText; btn.disabled = false;
+            }
+        });
+
+        // Init
         setLanguage('ar');
     </script>
 
 </body>
 
-</html>
+</html>>
