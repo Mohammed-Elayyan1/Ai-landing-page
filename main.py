@@ -430,16 +430,33 @@ async def get_paypal_links():
 
 
 # =============================================================================
-# مطالبة تفعيل عبر PayPal — نظرًا لأن روابط PayPal Buy-Now البسيطة
-# (بدون تكامل REST API + Webhook حقيقي من PayPal) لا ترسل أي تأكيد تلقائي
-# لسيرفرك عند نجاح الدفع، فهذه النقطة تُصدر مفتاح API فورًا للعميل بعد أن
-# يخبرك بأنه دفع (اسم + بريد + رقم عملية PayPal اختياري)، وتُعلَّم الحالة
-# "بانتظار التحقق" حتى تراجع حسابك على PayPal يدويًا وتؤكد أو تُلغي.
-#
-# ⚠️ هذا حل عملي وسريع، لكنه يعتمد على الثقة المبدئية بالعميل. إن أردت حماية
-# كاملة من الاحتيال، الخيار الصحيح لاحقًا هو تفعيل PayPal REST API + Webhooks
-# الحقيقية (مثل ما فعلنا تمامًا مع Stripe)، لا مجرد روابط دفع ثابتة.
+# مطالبة تفعيل عبر PayPal — النسخة الآمنة: بدل ما نصدر مفتاح API فورًا،
+# نخزن الطلب كـ "بانتظار المراجعة" فقط. أنت (الأدمن) تراجع حساب PayPal يدويًا،
+# وبس لما تتأكد إن الدفعة وصلت فعليًا، تضغط "موافقة" ووقتها بس يتولد
+# المفتاح ويوصل للعميل (بالبريد إذا فعّلت SMTP، أو تاخده من لوحة الإدارة
+# وترسله يدويًا). العميل ما رح ياخد أي مفتاح قبل موافقتك.
 # =============================================================================
+PENDING_FILE = Path(__file__).parent / "pending_claims.json"
+
+
+def _load_pending() -> dict:
+    if PENDING_FILE.exists():
+        try:
+            return json.loads(PENDING_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_pending(data: dict) -> None:
+    PENDING_FILE.write_text(json.dumps(
+        data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+# request_id -> {name, email, plan, paypal_reference, submitted_at}
+PENDING_CLAIMS: dict = _load_pending()
+
+
 class PaypalClaim(BaseModel):
     name: str
     email: str
@@ -452,28 +469,20 @@ async def claim_paypal_subscription(claim: PaypalClaim):
     if claim.plan not in PLANS:
         raise HTTPException(status_code=400, detail="الباقة غير صالحة.")
 
-    api_key = f"ent_key_{uuid.uuid4().hex}"
-    DB_COMPANIES[api_key] = {
+    request_id = f"req_{uuid.uuid4().hex}"
+    PENDING_CLAIMS[request_id] = {
         "name": claim.name,
-        "plan": claim.plan,
         "email": claim.email,
-        "file_data": "",
-        "usage": {},
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "active": True,
-        "payment_method": "paypal",
+        "plan": claim.plan,
         "paypal_reference": claim.paypal_reference,
-        "verified": False,  # يبقى False حتى تراجعه أنت يدويًا من لوحة PayPal
+        "submitted_at": datetime.now(timezone.utc).isoformat(),
     }
-    _save_db(DB_COMPANIES)
-    send_api_key_email(claim.email, claim.name, claim.plan, api_key)
+    _save_pending(PENDING_CLAIMS)
 
     return {
-        "status": "success",
-        "message": "تم إصدار مفتاحكم فورًا. سيتم التحقق من الدفعة خلال ساعات العمل.",
-        "company": claim.name,
-        "plan": claim.plan,
-        "api_key": api_key,
+        "status": "pending",
+        "message": "تم استلام طلبكم بنجاح. بعد التحقق من الدفعة سيصلكم مفتاح API عبر البريد الإلكتروني خلال ساعات العمل.",
+        "request_id": request_id,
     }
 
 
@@ -489,19 +498,65 @@ async def admin_list_companies(x_admin_token: str = Header(None)):
     return DB_COMPANIES
 
 
-@app.post("/admin/verify/{api_key}")
-async def admin_verify_payment(api_key: str, x_admin_token: str = Header(None)):
-    """استخدمها بعد ما تتأكد يدويًا من لوحة PayPal إن الدفعة فعلاً وصلت."""
+@app.get("/admin/pending-claims")
+async def admin_list_pending(x_admin_token: str = Header(None)):
+    """اعرض كل الطلبات بانتظار المراجعة — راجعها مقابل حساب PayPal قبل الموافقة."""
     _check_admin(x_admin_token)
-    company = get_company(api_key)
-    company["verified"] = True
+    return PENDING_CLAIMS
+
+
+@app.post("/admin/approve-claim/{request_id}")
+async def admin_approve_claim(request_id: str, x_admin_token: str = Header(None)):
+    """استخدمها فقط بعد ما تتأكد يدويًا من لوحة PayPal إن الدفعة وصلت فعليًا.
+    هنا فقط يتولد مفتاح API الحقيقي ويُرسل للعميل."""
+    _check_admin(x_admin_token)
+    claim = PENDING_CLAIMS.get(request_id)
+    if not claim:
+        raise HTTPException(
+            status_code=404, detail="الطلب غير موجود أو تمت معالجته مسبقًا.")
+
+    api_key = f"ent_key_{uuid.uuid4().hex}"
+    DB_COMPANIES[api_key] = {
+        "name": claim["name"],
+        "plan": claim["plan"],
+        "email": claim["email"],
+        "file_data": "",
+        "usage": {},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "active": True,
+        "payment_method": "paypal",
+        "paypal_reference": claim.get("paypal_reference", ""),
+        "verified": True,
+    }
     _save_db(DB_COMPANIES)
-    return {"status": "success", "message": f"تم تأكيد اشتراك {company['name']}."}
+
+    del PENDING_CLAIMS[request_id]
+    _save_pending(PENDING_CLAIMS)
+
+    send_api_key_email(claim["email"], claim["name"], claim["plan"], api_key)
+
+    return {
+        "status": "success",
+        "message": f"تم تفعيل {claim['name']} وإرسال المفتاح.",
+        "company": claim["name"],
+        "api_key": api_key,  # يظهر لك هنا أيضًا لترسله يدويًا إن لم يكن SMTP مفعّلاً
+    }
+
+
+@app.post("/admin/reject-claim/{request_id}")
+async def admin_reject_claim(request_id: str, x_admin_token: str = Header(None)):
+    """استخدمها إذا تبيّن أن الطلب غير حقيقي (لم تصل أي دفعة مطابقة)."""
+    _check_admin(x_admin_token)
+    if request_id not in PENDING_CLAIMS:
+        raise HTTPException(status_code=404, detail="الطلب غير موجود.")
+    removed = PENDING_CLAIMS.pop(request_id)
+    _save_pending(PENDING_CLAIMS)
+    return {"status": "success", "message": f"تم رفض طلب {removed['name']}."}
 
 
 @app.post("/admin/revoke/{api_key}")
 async def admin_revoke(api_key: str, x_admin_token: str = Header(None)):
-    """استخدمها إذا اكتشفت مطالبة غير حقيقية (لم تصل الدفعة فعليًا)."""
+    """استخدمها لإيقاف حساب مفعّل مسبقًا (مثلاً عند إلغاء الاشتراك)."""
     _check_admin(x_admin_token)
     company = get_company(api_key)
     company["active"] = False
