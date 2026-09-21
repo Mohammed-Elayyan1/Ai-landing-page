@@ -1576,40 +1576,7 @@
                     <h2 class="section-title" data-i18n="pay.title"></h2>
                     <p class="section-sub" data-i18n="pay.sub"></p>
                 </div>
-                <div class="pay-grid">
-                    <div class="pay-card">
-                        <div class="pay-head">
-                            <div class="pay-logo stripe">S</div>
-                            <div>
-                                <h3 data-i18n="pay.stripeTitle"></h3>
-                                <div class="pay-sub" data-i18n="pay.stripeSub"></div>
-                            </div>
-                        </div>
-                        <p style="color:var(--text-1); font-size:0.9rem;" data-i18n="pay.stripeDesc"></p>
-                        <form id="stripeForm" onsubmit="return false;"
-                            style="margin-top:18px; display:flex; flex-direction:column; gap:12px;">
-                            <div class="field" style="margin-bottom:0;">
-                                <label for="stripeName" data-i18n="pay.nameLabel"></label>
-                                <input id="stripeName" type="text" required>
-                            </div>
-                            <div class="field" style="margin-bottom:0;">
-                                <label for="stripeEmail" data-i18n="pay.emailLabel"></label>
-                                <input id="stripeEmail" type="email" required placeholder="name@company.com">
-                            </div>
-                            <div class="field" style="margin-bottom:0;">
-                                <label for="stripePlan" data-i18n="pay.planLabel"></label>
-                                <select id="stripePlan"
-                                    style="width:100%; padding:12px 14px; border-radius:12px; background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.12); color:var(--text-0); font-size:0.9rem;">
-                                    <option value="basic">Basic — $29</option>
-                                    <option value="pro" selected>Pro — $79</option>
-                                    <option value="enterprise">Enterprise — $199</option>
-                                </select>
-                            </div>
-                            <button type="submit" class="btn btn-primary btn-block" id="stripeBtn"
-                                data-i18n="pay.stripeBtn"></button>
-                        </form>
-                    </div>
-
+                <div class="pay-grid" style="grid-template-columns:1fr; max-width:520px; margin:0 auto;">
                     <div class="pay-card">
                         <div class="pay-head">
                             <div class="pay-logo paypal">P</div>
@@ -1768,7 +1735,7 @@
                     items: [
                         { icon: "🧠", title: "فهم بيانات شركتك", text: "ارفع ملفاتك ووثائقك، ويقوم المساعد بالإجابة بناءً على محتواها الفعلي فقط." },
                         { icon: "🔑", title: "مفتاح API خاص بك", text: "كل شركة تحصل على مفتاح API فريد للوصول الآمن إلى جميع نقاط النظام." },
-                        { icon: "💳", title: "دفع واشتراكات مرنة", text: "تكامل مباشر مع Stripe و PayPal لإدارة الاشتراكات والفواتير تلقائيًا." },
+                        { icon: "💳", title: "دفع واشتراكات مرنة", text: "تكامل مباشر مع PayPal لإدارة الاشتراكات واستلام مفتاح API فوري بعد الدفع." },
                         { icon: "📈", title: "لوحة تحكم شاملة", text: "راقب عدد الاستفسارات، استخدام الباقة، وأداء المساعد من مكان واحد." },
                         { icon: "🛡️", title: "أمان على مستوى المؤسسات", text: "تشفير للبيانات أثناء النقل والتخزين، مع صلاحيات وصول قابلة للتخصيص." },
                         { icon: "🌐", title: "دعم متعدد اللغات", text: "واجهة وردود بالعربية والإنجليزية، قابلة للتوسعة للغات إضافية." }
@@ -1831,10 +1798,7 @@
                     toastSubmit: "هذا نموذج عرض تصميمي — يجب ربطه بواجهة API الخاصة بالخادم"
                 },
                 pay: {
-                    kicker: "طرق الدفع", title: "ادفع بالطريقة التي تناسبك", sub: "اشتراكات آمنة عبر Stripe، أو دفع مباشر وسريع عبر PayPal.",
-                    stripeTitle: "الدفع عبر Stripe", stripeSub: "اشتراك شهري متجدد تلقائيًا",
-                    stripeDesc: "أدخل بيانات شركتك واختر الباقة — سيتم تحويلك مباشرة لصفحة دفع Stripe الآمنة.",
-                    stripeBtn: "المتابعة إلى الدفع", stripeToast: "جاري تحويلك إلى صفحة الدفع الآمنة عبر Stripe...",
+                    kicker: "طرق الدفع", title: "اشترك عبر PayPal بخطوتين", sub: "ادفع بأمان عبر PayPal، واستلم مفتاح API فورًا لتبدأ الاستخدام مباشرة.",
                     paypalTitle: "الدفع عبر PayPal", paypalSub: "ادفع أولًا ثم فعّل حسابك فورًا",
                     paypalDesc: "اضغط على الباقة المناسبة لإتمام الدفع عبر PayPal، ثم عبّئ النموذج أدناه لاستلام مفتاح API فورًا.",
                     nameLabel: "اسم الشركة", emailLabel: "البريد الإلكتروني", planLabel: "الباقة",
@@ -1843,7 +1807,6 @@
                     paypalNote: "⚠️ يتم إصدار المفتاح فورًا لتسريع تجربتك، وتتم مراجعة الدفعة يدويًا من حساب PayPal خلال ساعات العمل. أي حساب غير مؤكَّد قد يُوقف.",
                     keyReadyLabel: "تم تفعيل حسابكم! هذا مفتاح الـ API الخاص بكم:",
                     copyBtn: "نسخ",
-                    stripeError: "حدث خطأ أثناء إنشاء جلسة الدفع. تحقق من إعداد الخادم.",
                     paypalClaimError: "حدث خطأ أثناء إصدار المفتاح. حاول مرة أخرى."
                 },
                 faq: {
@@ -1851,7 +1814,7 @@
                     items: [
                         { q: "هل أحتاج إلى خبرة تقنية للبدء؟", a: "لا. يمكنك التسجيل والحصول على مفتاح API الخاص بك خلال دقائق، ودمجه باتباع خطوات التوثيق البسيطة." },
                         { q: "هل يمكنني تغيير الباقة لاحقًا؟", a: "نعم، يمكنك الترقية أو التخفيض في أي وقت من لوحة التحكم دون فقدان بياناتك." },
-                        { q: "ما هي طرق الدفع المتاحة؟", a: "ندعم الدفع عبر Stripe (بطاقات ائتمانية) وPayPal للدفعات المباشرة أو الاشتراكات اليدوية." },
+                        { q: "ما هي طرق الدفع المتاحة؟", a: "ندعم الدفع عبر PayPal حاليًا. تدفع الاشتراك، ثم تستلم مفتاح API فورًا لتبدأ الاستخدام." },
                         { q: "هل بياناتي آمنة؟", a: "جميع البيانات مشفّرة أثناء النقل والتخزين، ولا تتم مشاركتها مع أي طرف ثالث." },
                         { q: "هل يوجد ضمان استرجاع الأموال؟", a: "نعم، نوفر ضمان استرجاع كامل خلال أول 14 يومًا من الاشتراك في أي باقة." }
                     ]
@@ -1888,7 +1851,7 @@
                     items: [
                         { icon: "🧠", title: "Understands your data", text: "Upload your files and documents — the assistant answers strictly based on their actual content." },
                         { icon: "🔑", title: "Your own API key", text: "Every company gets a unique API key for secure access to all endpoints." },
-                        { icon: "💳", title: "Flexible billing", text: "Direct integration with Stripe and PayPal to manage subscriptions and invoices automatically." },
+                        { icon: "💳", title: "Flexible billing", text: "Direct PayPal integration to manage subscriptions and issue your API key instantly after payment." },
                         { icon: "📈", title: "Full dashboard", text: "Track query volume, plan usage, and assistant performance from one place." },
                         { icon: "🛡️", title: "Enterprise-grade security", text: "Data encrypted in transit and at rest, with customizable access permissions." },
                         { icon: "🌐", title: "Multilingual support", text: "Interface and replies in Arabic and English, extensible to more languages." }
@@ -1951,10 +1914,7 @@
                     toastSubmit: "This is a design demo — connect it to your backend API"
                 },
                 pay: {
-                    kicker: "Payment methods", title: "Pay the way that works for you", sub: "Secure recurring billing via Stripe, or a direct, fast payment via PayPal.",
-                    stripeTitle: "Pay with Stripe", stripeSub: "Auto-renewing monthly subscription",
-                    stripeDesc: "Enter your company details and pick a plan — you'll be sent straight to Stripe's secure checkout.",
-                    stripeBtn: "Continue to payment", stripeToast: "Redirecting you to Stripe's secure checkout...",
+                    kicker: "Payment methods", title: "Subscribe via PayPal in two steps", sub: "Pay securely through PayPal and get your API key instantly to start using the platform.",
                     paypalTitle: "Pay with PayPal", paypalSub: "Pay first, then activate instantly",
                     paypalDesc: "Click the matching plan to pay via PayPal, then fill the form below to get your API key instantly.",
                     nameLabel: "Company name", emailLabel: "Email", planLabel: "Plan",
@@ -1963,7 +1923,6 @@
                     paypalNote: "⚠️ Your key is issued instantly to speed up onboarding, and the payment is manually verified against our PayPal account during business hours. Unverified accounts may be suspended.",
                     keyReadyLabel: "Your account is active! Here's your API key:",
                     copyBtn: "Copy",
-                    stripeError: "Something went wrong creating the checkout session. Check your server setup.",
                     paypalClaimError: "Something went wrong issuing your key. Please try again."
                 },
                 faq: {
@@ -1971,7 +1930,7 @@
                     items: [
                         { q: "Do I need technical experience to get started?", a: "No. You can sign up and get your API key in minutes, then integrate it by following our simple docs." },
                         { q: "Can I change my plan later?", a: "Yes, you can upgrade or downgrade anytime from your dashboard without losing your data." },
-                        { q: "What payment methods are available?", a: "We support Stripe (credit cards) and PayPal for direct payments or manual subscriptions." },
+                        { q: "What payment methods are available?", a: "We currently support PayPal. Pay for your plan and get your API key instantly to start using the platform." },
                         { q: "Is my data secure?", a: "All data is encrypted in transit and at rest, and is never shared with third parties." },
                         { q: "Is there a money-back guarantee?", a: "Yes, we offer a full refund within the first 14 days of any plan." }
                     ]
@@ -2201,32 +2160,6 @@
             showToast(lang === 'ar' ? 'تم النسخ' : 'Copied');
         });
 
-        // --- Real Stripe checkout: calls your FastAPI backend, then redirects ---
-        document.getElementById('stripeForm').addEventListener('submit', async () => {
-            const name = document.getElementById('stripeName').value.trim();
-            const email = document.getElementById('stripeEmail').value.trim();
-            const plan = document.getElementById('stripePlan').value;
-            if (!name || !email) { return; }
-
-            const btn = document.getElementById('stripeBtn');
-            const originalText = btn.textContent;
-            btn.textContent = '...'; btn.disabled = true;
-            try {
-                const body = new URLSearchParams({ name, email, plan });
-                const res = await fetch(`${API_BASE_URL}/enterprise/create-checkout-session`, {
-                    method: 'POST', body
-                });
-                if (!res.ok) throw new Error('request failed');
-                const data = await res.json();
-                showToast(currentDict().pay.stripeToast);
-                window.location.href = data.checkout_url;
-            } catch (err) {
-                showToast(currentDict().pay.stripeError);
-            } finally {
-                btn.textContent = originalText; btn.disabled = false;
-            }
-        });
-
         // --- Real PayPal claim: calls your backend, gets an API key back instantly ---
         document.getElementById('paypalClaimForm').addEventListener('submit', async () => {
             const name = document.getElementById('ppName').value.trim();
@@ -2259,4 +2192,4 @@
 
 </body>
 
-</html>>
+</html>

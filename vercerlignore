@@ -1,0 +1,5 @@
+main.py
+requirements.txt
+companies_db.json
+.env
+.env.example
