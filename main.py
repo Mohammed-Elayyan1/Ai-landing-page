@@ -46,6 +46,7 @@ app.add_middleware(
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:8501")
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "")
@@ -70,8 +71,8 @@ PAYPAL_LINKS = {
 
 if not stripe.api_key:
     print("⚠️  STRIPE_SECRET_KEY غير مُعرّف — الدفع لن يعمل حتى تضيفه في .env")
-if not ANTHROPIC_API_KEY:
-    print("⚠️  ANTHROPIC_API_KEY غير مُعرّف — سيتم استخدام رد احتياطي بسيط بدل الذكاء الاصطناعي الحقيقي")
+if not ANTHROPIC_API_KEY and not GEMINI_API_KEY:
+    print("⚠️  لا يوجد ANTHROPIC_API_KEY ولا GEMINI_API_KEY — سيتم استخدام رد احتياطي بسيط بدل الذكاء الاصطناعي الحقيقي")
 
 # =============================================================================
 # باقات الأسعار + المميزات والحدود المرتبطة بكل باقة
@@ -193,12 +194,53 @@ def send_api_key_email(to_email: str, company_name: str, plan: str, api_key: str
 
 
 # =============================================================================
-# طبقة الذكاء الاصطناعي الحقيقية — عبر Claude API (Anthropic)
-# تعطي ردًا مبنيًا فعليًا على سؤال العميل + بيانات ملفه المرفوع (إن وجد)
+# طبقة الذكاء الاصطناعي الحقيقية — تدعم Gemini (مجاني) أو Claude (Anthropic)
+# أي مفتاح موجود بمتغيرات البيئة يُستخدم تلقائيًا. تعطي ردًا مبنيًا فعليًا
+# على سؤال العميل + بيانات ملفه المرفوع (إن وجد).
 # =============================================================================
+def _build_system_prompt(company_name: str, file_data: str) -> str:
+    prompt = (
+        f"أنت مساعد ذكاء اصطناعي خاص بشركة \"{company_name}\". "
+        "أجب على أسئلة العملاء بالاعتماد فقط على المعلومات المتوفرة لك عن الشركة أدناه إن وجدت، "
+        "وإن لم تكن كافية فأجب بعمومية مهذبة توضح أنك بحاجة لمزيد من البيانات. "
+        "أجب بنفس لغة سؤال المستخدم (عربي أو إنجليزي)."
+    )
+    if file_data:
+        prompt += f"\n\nبيانات الشركة المرفوعة:\n{file_data[:6000]}"
+    return prompt
+
+
+def _call_gemini(question: str, system_prompt: str) -> str:
+    import requests
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+    )
+    payload = {
+        "system_instruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"role": "user", "parts": [{"text": question}]}],
+    }
+    resp = requests.post(url, json=payload, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    return data["candidates"][0]["content"]["parts"][0]["text"]
+
+
+def _call_anthropic(question: str, system_prompt: str) -> str:
+    import anthropic
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=600,
+        system=system_prompt,
+        messages=[{"role": "user", "content": question}],
+    )
+    return "".join(block.text for block in response.content if hasattr(block, "text"))
+
+
 def generate_ai_answer(question: str, company_name: str, file_data: str) -> str:
-    if not ANTHROPIC_API_KEY:
-        # رد احتياطي بسيط في حال عدم إعداد مفتاح Claude بعد
+    if not GEMINI_API_KEY and not ANTHROPIC_API_KEY:
+        # رد احتياطي بسيط في حال عدم إعداد أي مفتاح ذكاء اصطناعي بعد
         base = f"شكرًا لسؤالكم: \"{question}\". "
         if file_data:
             base += "بناءً على المستند المرفوع، يمكنني مساعدتكم بمزيد من التفاصيل بمجرد تفعيل الذكاء الاصطناعي الحقيقي."
@@ -206,27 +248,12 @@ def generate_ai_answer(question: str, company_name: str, file_data: str) -> str:
             base += "لم يتم رفع أي مستندات بعد لهذه الشركة."
         return base
 
+    system_prompt = _build_system_prompt(company_name, file_data)
+
     try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-
-        system_prompt = (
-            f"أنت مساعد ذكاء اصطناعي خاص بشركة \"{company_name}\". "
-            "أجب على أسئلة العملاء بالاعتماد فقط على المعلومات المتوفرة لك عن الشركة أدناه إن وجدت، "
-            "وإن لم تكن كافية فأجب بعمومية مهذبة توضح أنك بحاجة لمزيد من البيانات. "
-            "أجب بنفس لغة سؤال المستخدم (عربي أو إنجليزي)."
-        )
-        if file_data:
-            system_prompt += f"\n\nبيانات الشركة المرفوعة:\n{file_data[:6000]}"
-
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=600,
-            system=system_prompt,
-            messages=[{"role": "user", "content": question}],
-        )
-        return "".join(block.text for block in response.content if hasattr(block, "text"))
+        if GEMINI_API_KEY:
+            return _call_gemini(question, system_prompt)
+        return _call_anthropic(question, system_prompt)
     except Exception as e:
         return f"عذرًا، حدث خطأ أثناء توليد الرد الذكي: {e}"
 
