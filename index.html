@@ -1703,7 +1703,7 @@
         // ---------------- CONFIG: EDIT THIS ----------------
         // بعد نشر main.py على سيرفر حقيقي، غيّر هذا الرابط ليطابق رابط الخادم الفعلي
         // After deploying main.py to a real server, update this to your server's URL
-        const API_BASE_URL = "http://localhost:8000";
+        const API_BASE_URL = "https://ai-landing-page-production-b2bd.up.railway.app";
 
         // روابط PayPal الثابتة لكل باقة (نفس الروابط الموجودة في main.py)
         const PAYPAL_LINKS = {
@@ -2160,12 +2160,16 @@
             showToast(lang === 'ar' ? 'تم النسخ' : 'Copied');
         });
 
-        // --- Real PayPal claim: calls your backend, gets an API key back instantly ---
+        // --- Real PayPal claim: sends the request to your backend for manual review.
+        //     No API key is issued instantly — the backend returns {status:"pending", message}.
         document.getElementById('paypalClaimForm').addEventListener('submit', async () => {
             const name = document.getElementById('ppName').value.trim();
             const email = document.getElementById('ppEmail').value.trim();
             const paypal_reference = document.getElementById('ppRef').value.trim();
-            if (!name || !email) { return; }
+            if (!name || !email) {
+                showToast(lang === 'ar' ? 'يرجى تعبئة اسم الشركة والبريد الإلكتروني' : 'Please fill in company name and email');
+                return;
+            }
 
             const btn = document.getElementById('paypalClaimBtn');
             const originalText = btn.textContent;
@@ -2176,11 +2180,24 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, email, plan: selectedPaypalPlan, paypal_reference })
                 });
-                if (!res.ok) throw new Error('request failed');
-                const data = await res.json();
-                showApiKey(data.api_key);
+                let data = null;
+                try { data = await res.json(); } catch (parseErr) { data = null; }
+
+                if (!res.ok) {
+                    const detail = data && data.detail ? data.detail : currentDict().pay.paypalClaimError;
+                    showToast(detail);
+                    return;
+                }
+
+                // Backend intentionally does NOT return an api_key here (pending-approval flow).
+                // Show its confirmation message instead of trying to display a key.
+                showToast(data && data.message ? data.message : currentDict().pay.paypalClaimError);
+                document.getElementById('paypalClaimForm').reset();
             } catch (err) {
-                showToast(currentDict().pay.paypalClaimError);
+                // Network error (backend unreachable, CORS, wrong API_BASE_URL, etc.)
+                showToast(lang === 'ar'
+                    ? 'تعذّر الاتصال بالخادم. تحقق من اتصالك بالإنترنت وحاول مجددًا.'
+                    : 'Could not reach the server. Check your connection and try again.');
             } finally {
                 btn.textContent = originalText; btn.disabled = false;
             }
