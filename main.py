@@ -182,10 +182,8 @@ class _IPv4SMTP(smtplib.SMTP):
 
     def _get_socket(self, host, port, timeout):
         if timeout is not None and not timeout:
-            raise ValueError(
-                "Non-blocking socket (timeout=0) is not supported")
-        addr_info = socket.getaddrinfo(
-            host, port, socket.AF_INET, socket.SOCK_STREAM)
+            raise ValueError("Non-blocking socket (timeout=0) is not supported")
+        addr_info = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
         return socket.create_connection(
             addr_info[0][4], timeout, self.source_address
         )
@@ -200,10 +198,8 @@ class _IPv4SMTP_SSL(smtplib.SMTP_SSL):
 
     def _get_socket(self, host, port, timeout):
         if timeout is not None and not timeout:
-            raise ValueError(
-                "Non-blocking socket (timeout=0) is not supported")
-        addr_info = socket.getaddrinfo(
-            host, port, socket.AF_INET, socket.SOCK_STREAM)
+            raise ValueError("Non-blocking socket (timeout=0) is not supported")
+        addr_info = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
         new_socket = socket.create_connection(
             addr_info[0][4], timeout, self.source_address
         )
@@ -224,8 +220,7 @@ def _smtp_send(to_email: str, msg: "MIMEText") -> None:
     primary_port = SMTP_PORT
     fallback_port = 465 if primary_port != 465 else 587
 
-    attempts = [(primary_port, use_ssl_first),
-                (fallback_port, not use_ssl_first)]
+    attempts = [(primary_port, use_ssl_first), (fallback_port, not use_ssl_first)]
 
     last_exc: OSError | None = None
     for port, use_ssl in attempts:
@@ -644,8 +639,7 @@ def enforce_plan_limits(company: dict) -> None:
     on_trial = bool(company.get("trial")) and not company.get("payment_method")
     if on_trial:
         # التجربة المجانية لها سقف أصغر لحماية السيرفر من الإساءة
-        limit = TRIAL_QUERY_LIMIT if limit is None else min(
-            limit, TRIAL_QUERY_LIMIT)
+        limit = TRIAL_QUERY_LIMIT if limit is None else min(limit, TRIAL_QUERY_LIMIT)
     if limit is None:
         return
 
@@ -1278,18 +1272,21 @@ def _call_gemini(
         "contents": contents,
     }
     resp = None
-    # أخطاء 429/5xx مؤقتة غالبًا (ضغط عند Google): نعيد المحاولة حتى 3 مرات مع انتظار متزايد.
-    attempts = 3
+    # أخطاء 429/5xx مؤقتة غالبًا (ضغط عند Google): محاولتان فقط ثم ننتقل للموديل التالي.
+    # المهلة 20 ثانية (بدل 30) حتى لا ينتظر الزائر دقيقة كاملة قبل الانتقال لموديل بديل.
+    attempts = 2
     for attempt in range(attempts):
-        resp = requests.post(url, headers=headers, json=payload, timeout=30)
-        if resp.status_code not in (429, 500, 502, 503, 504):
+        resp = requests.post(url, headers=headers, json=payload, timeout=20)
+        # 429 = تجاوز الحد المسموح: إعادة المحاولة تستهلك طلبات إضافية بلا فائدة،
+        # فننتقل مباشرة للموديل التالي. نعيد المحاولة فقط عند أخطاء السيرفر المؤقتة.
+        if resp.status_code not in (500, 502, 503, 504):
             break
         print(
             f"⚠️  Gemini ({model}) رجّع {resp.status_code}، "
             f"محاولة {attempt + 1}/{attempts}"
         )
         if attempt < attempts - 1:
-            time.sleep(1.5 * (attempt + 1))
+            time.sleep(1)
     if not resp.ok:
         # نطبع نص الخطأ الكامل من Google بدل الاكتفاء برمز الحالة، ليسهل تشخيص السبب الحقيقي.
         print(f"⚠️  Gemini API رفض الطلب ({resp.status_code}): {resp.text}")
@@ -1366,8 +1363,7 @@ def generate_ai_reply(
                 )
             )
     if ANTHROPIC_API_KEY:
-        providers.append(
-            ("Anthropic", lambda q, s, h: _call_anthropic(q, s, h)))
+        providers.append(("Anthropic", lambda q, s, h: _call_anthropic(q, s, h)))
 
     for name, call in providers:
         try:
@@ -1847,8 +1843,7 @@ async def public_config(request: Request, token: str):
 _PUBLIC_UNAVAILABLE = (
     "المساعد غير متاح حالياً. يرجى التواصل مع الشركة مباشرة."
 )
-# المحادثات الأقدم تُحذف تلقائياً (خصوصية الزوار)
-CONVERSATION_RETENTION_DAYS = 90
+CONVERSATION_RETENTION_DAYS = 90  # المحادثات الأقدم تُحذف تلقائياً (خصوصية الزوار)
 MAX_LOGGED_TURNS = 400  # أقصى عدد أسئلة محفوظة لكل شركة (الأقدم يُحذف)
 MAX_LEADS = 500
 _DIALECTS = {"auto", "gulf", "levant", "msa"}
@@ -1925,8 +1920,7 @@ def _log_turn(
         del convs[: len(convs) - MAX_LOGGED_TURNS]
     # خصوصية: لا نحتفظ بنصوص محادثات الزوار أكثر من 90 يومًا
     cutoff = (
-        datetime.now(timezone.utc) -
-        timedelta(days=CONVERSATION_RETENTION_DAYS)
+        datetime.now(timezone.utc) - timedelta(days=CONVERSATION_RETENTION_DAYS)
     ).isoformat()
     if convs and convs[0].get("at", "") < cutoff:
         convs[:] = [t for t in convs if t.get("at", "") >= cutoff]
@@ -2015,8 +2009,7 @@ def _create_lead(
     digits = _phone_digits(phone)
 
     if email and not _EMAIL_RE.match(email):
-        raise HTTPException(
-            status_code=400, detail="البريد الإلكتروني غير صالح.")
+        raise HTTPException(status_code=400, detail="البريد الإلكتروني غير صالح.")
     if phone and not (7 <= len(digits) <= 15):
         raise HTTPException(status_code=400, detail="رقم الهاتف غير صالح.")
     if not phone and not email:
@@ -2179,8 +2172,7 @@ async def get_insights(days: int = 30, x_api_key: OptionalHeader = None):
 
     st = _company_settings(company)
     won = sum(1 for l in leads if l.get("status") == "won")
-    open_leads = sum(1 for l in leads if l.get(
-        "status") in ("new", "contacted"))
+    open_leads = sum(1 for l in leads if l.get("status") in ("new", "contacted"))
     avg_sale = st["avg_sale"]
     roi = {
         "configured": avg_sale > 0,
@@ -2221,8 +2213,7 @@ async def get_insights(days: int = 30, x_api_key: OptionalHeader = None):
                     "unknown": bool(t.get("unknown")),
                 }
             )
-    recent = sorted(sessions.values(),
-                    key=lambda s: s["last_at"], reverse=True)[:30]
+    recent = sorted(sessions.values(), key=lambda s: s["last_at"], reverse=True)[:30]
 
     return {
         "days": days,
@@ -2309,8 +2300,7 @@ async def teach_assistant(payload: TeachRequest, x_api_key: OptionalHeader = Non
             "uploaded_at": datetime.now(timezone.utc).isoformat(),
         }
         files.append(qa_file)
-    new_content = qa_file.get("content", "") + \
-        f"\nسؤال: {question}\nالجواب: {answer}\n"
+    new_content = qa_file.get("content", "") + f"\nسؤال: {question}\nالجواب: {answer}\n"
     if len(new_content) > MAX_QA_FILE_CHARS:
         raise HTTPException(
             status_code=413,
@@ -2342,11 +2332,9 @@ async def public_chat_page(token: str):
         )
     company = DB_COMPANIES[api_key]
     company_name = _esc(company.get("name", "NexusAI"))
-    greeting = _company_settings(
-        company)["greeting"] or "أهلًا! كيف أقدر أساعدك اليوم؟"
+    greeting = _company_settings(company)["greeting"] or "أهلًا! كيف أقدر أساعدك اليوم؟"
     # JSON داخل <script>: نمنع إغلاق الوسم مبكرًا بـ "</"
-    greeting_js = json.dumps(
-        greeting, ensure_ascii=False).replace("</", "<\\/")
+    greeting_js = json.dumps(greeting, ensure_ascii=False).replace("</", "<\\/")
     html = (
         _PUBLIC_CHAT_PAGE_TEMPLATE.replace("__COMPANY_NAME__", company_name)
         .replace("__TOKEN__", token)
@@ -2605,8 +2593,7 @@ async def signup(request: Request, payload: SignupRequest):
         "payment_method": None,
     }
     _save_db()
-    _fire_and_forget(send_api_key_email, payload.email,
-                     payload.name, "pro", api_key)
+    _fire_and_forget(send_api_key_email, payload.email, payload.name, "pro", api_key)
     return {
         "status": "success",
         "company": payload.name,
@@ -2759,8 +2746,7 @@ async def forgot_password(request: Request, payload: ForgotPasswordRequest):
     company["reset_token_expires_at"] = expires_at.isoformat()
     _save_db()
 
-    _fire_and_forget(send_password_reset_email,
-                     payload.email, company["name"], token)
+    _fire_and_forget(send_password_reset_email, payload.email, company["name"], token)
     return _GENERIC_RESET_RESPONSE
 
 
@@ -3088,8 +3074,7 @@ def _paypal_capture_net(capture_id: str, token: str) -> dict | None:
         gross_v = float(gross.get("value"))
         fee_v = float(fee.get("value") or 0)
         net_v = (
-            float(net.get("value")) if net.get(
-                "value") is not None else gross_v - fee_v
+            float(net.get("value")) if net.get("value") is not None else gross_v - fee_v
         )
         same_currency = (
             currency
@@ -3361,11 +3346,9 @@ async def admin_extend_trial(
     days = max(1, min(int(payload.days), 365))
     api_key, company = _find_company_by_email(payload.email)
     if not api_key:
-        raise HTTPException(
-            status_code=404, detail="لا يوجد حساب بهذا البريد.")
+        raise HTTPException(status_code=404, detail="لا يوجد حساب بهذا البريد.")
     if company.get("payment_method"):
-        raise HTTPException(
-            status_code=400, detail="الحساب مدفوع، لا يحتاج تمديدًا.")
+        raise HTTPException(status_code=400, detail="الحساب مدفوع، لا يحتاج تمديدًا.")
     ends = datetime.now(timezone.utc) + timedelta(days=days)
     company["trial"] = True
     company["trial_ends_at"] = ends.isoformat()
@@ -3490,8 +3473,7 @@ def _trial_reminder_pass() -> None:
                 datetime.fromisoformat(company["trial_ends_at"]) - now
             ).total_seconds() / 3600
             if 0 < hours_left <= TRIAL_REMINDER_HOURS:
-                # قبل الإرسال: لا تكرار أبدًا
-                company["trial_reminder_sent"] = True
+                company["trial_reminder_sent"] = True  # قبل الإرسال: لا تكرار أبدًا
                 _save_company(api_key)
                 _send_trial_reminder(company, hours_left)
         except Exception as exc:  # noqa: BLE001 — لا نوقف الحلقة لشركة واحدة
